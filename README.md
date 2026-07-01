@@ -1,13 +1,21 @@
 # tf-molecule-lambda-function-aws
 
-Terraform molecule that composes Lambda atoms into a production-ready function with CloudWatch logging and optional invoke permission.
+Terraform molecule that composes Lambda atoms into a production-ready AWS Lambda function with a dedicated CloudWatch log group and an optional invoke permission.
 
-## Atoms Composed
+## Features
+
+- **Production-ready Lambda function** — runtime, handler, timeout, memory, architecture, and environment variables, deployed from a local zip (`filename`) or an S3 object (`s3_bucket`/`s3_key`).
+- **Dedicated CloudWatch log group** — created ahead of the function at `/aws/lambda/<id>` with configurable retention and optional KMS encryption.
+- **Optional invoke permission** — grants a named principal (e.g. `apigateway.amazonaws.com`, `events.amazonaws.com`) permission to invoke the function; created only when `permission_principal` is set.
+- **tf-label identity & tagging** — consistent naming and tags via `namespace`/`environment`/`stage`/`name` (or a passed-in `context`), and an `enabled` switch to create nothing.
+- **Composed from pinned atoms** — every underlying atom is sourced at a fixed commit SHA for reproducible builds.
+
+### Atoms Composed
 
 | Atom | Purpose |
 |------|---------|
 | `tf-atom-lambda-function-aws` | Creates the Lambda function |
-| `tf-atom-cloudwatch-log-group-aws` | Creates dedicated CloudWatch log group |
+| `tf-atom-cloudwatch-log-group-aws` | Creates the dedicated CloudWatch log group |
 | `tf-atom-lambda-permission-aws` | (Optional) Grants invoke permission to a principal |
 
 ## Usage
@@ -20,7 +28,10 @@ module "api_handler" {
   environment = "prod"
   name        = "api-handler"
 
+  # Required
   role_arn = module.lambda_role.role_arn
+
+  # Deployment package (filename OR s3_bucket/s3_key)
   runtime  = "provided.al2023"
   handler  = "bootstrap"
   filename = "${path.module}/dist/bootstrap.zip"
@@ -111,3 +122,21 @@ No resources.
 | <a name="output_log_group_arn"></a> [log\_group\_arn](#output\_log\_group\_arn) | ARN of the CloudWatch log group |
 | <a name="output_log_group_name"></a> [log\_group\_name](#output\_log\_group\_name) | Name of the CloudWatch log group |
 <!-- END_TF_DOCS -->
+
+## Tests
+
+Unit tests use the native `terraform test` framework with a mocked AWS provider, so no
+real AWS credentials or network calls are required. They assert on plan-known values only
+(the tf-label `id`, the `enabled` flag, and optional-atom instantiation).
+
+```bash
+# Unit tests (mocked provider — no AWS credentials)
+terraform init -backend=false
+terraform test -test-directory=tests/unit
+
+# via Makefile
+make test-unit
+```
+
+Integration tests (which require real AWS credentials) live under `tests/integration` and
+run with `terraform test -test-directory=tests/integration` (`make test-integration`).
